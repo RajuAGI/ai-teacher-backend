@@ -9,7 +9,7 @@ CORS(app)
 
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 genai.configure(api_key=GEMINI_API_KEY)
-model = genai.GenerativeModel("gemini-1.5-flash")
+model = genai.GenerativeModel("gemini-2.0-flash")
 
 @app.route("/")
 def home():
@@ -25,7 +25,7 @@ def ask():
             f"You are a friendly AI Teacher. Explain topics clearly and simply like a real teacher. Keep answers easy to understand.\n\nStudent question: {question}"
         )
 
-        answer = response.candidates[0].content.parts[0].text
+        answer = response.text
         return jsonify({"answer": answer})
 
     except Exception as e:
