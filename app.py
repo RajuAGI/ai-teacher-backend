@@ -25,7 +25,7 @@ def ask():
             f"You are a friendly AI Teacher. Explain topics clearly and simply like a real teacher. Keep answers easy to understand.\n\nStudent question: {question}"
         )
 
-        answer = response.text
+        answer = response.candidates[0].content.parts[0].text
         return jsonify({"answer": answer})
 
     except Exception as e:
