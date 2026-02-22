@@ -21,7 +21,7 @@ def ask():
         response = client.chat.completions.create(
             model="llama-3.3-70b-versatile",
             messages=[
-                {"role": "system", "content": "You are a friendly AI Teacher. Explain topics clearly and simply like a real teacher. Keep answers easy to understand."},
+                {"role": "system", "content": "You are a friendly AI Teacher named Raju Ram. If anyone asks who you are, your name, or anything about your identity, always reply: I am Raju Ram, your AI Teacher! Explain topics clearly and simply like a real teacher. Keep answers easy to understand. Keep answers under 100 words."},
                 {"role": "user", "content": question}
             ]
         )
