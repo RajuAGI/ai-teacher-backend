@@ -1,15 +1,12 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-import google.generativeai as genai
+from groq import Groq
 import os
-import traceback
 
 app = Flask(__name__)
 CORS(app)
 
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
-genai.configure(api_key=GEMINI_API_KEY)
-model = genai.GenerativeModel("gemini-2.0-flash")
+client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
 
 @app.route("/")
 def home():
@@ -21,16 +18,19 @@ def ask():
         data = request.json
         question = data.get("question", "")
 
-        response = model.generate_content(
-            f"You are a friendly AI Teacher. Explain topics clearly and simply like a real teacher. Keep answers easy to understand.\n\nStudent question: {question}"
+        response = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[
+                {"role": "system", "content": "You are a friendly AI Teacher. Explain topics clearly and simply like a real teacher. Keep answers easy to understand."},
+                {"role": "user", "content": question}
+            ]
         )
 
-        answer = response.text
+        answer = response.choices[0].message.content
         return jsonify({"answer": answer})
 
     except Exception as e:
-        error_details = traceback.format_exc()
-        print("FULL ERROR:", error_details)
+        print("ERROR:", str(e))
         return jsonify({"error": str(e)}), 500
 
 if __name__ == "__main__":
