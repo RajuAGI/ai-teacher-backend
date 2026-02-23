@@ -1,6 +1,6 @@
 flask
 flask-cors
 groq
-requests
-beautifulsoup4
+gtts
+tavily-python
 gunicorn
