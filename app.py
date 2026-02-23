@@ -12,11 +12,18 @@ groq_client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
 
 def search_web(query):
     try:
-        headers = {"User-Agent": "Mozilla/5.0"}
-        url = f"https://duckduckgo.com/html/?q={query}"
-        response = requests.get(url, headers=headers, timeout=5)
-        soup = BeautifulSoup(response.text, "html.parser")
-        snippets = soup.find_all("a", class_="result__snippet", limit=5)
+        url = "https://www.googleapis.com/customsearch/v1"
+        params = {
+            "key": GOOGLE_API_KEY,
+            "cx": GOOGLE_SEARCH_ID,
+            "q": query,
+            "num": 5,
+            "lr": "lang_hi"
+        }
+        response = requests.get(url, params=params, timeout=5)
+        print("Google Search Status:", response.status_code)  # यह add करो
+        print("Google Search Response:", response.json())     # यह add करो
+        results = response.json()
 
         search_text = ""
         for i, snippet in enumerate(snippets):
