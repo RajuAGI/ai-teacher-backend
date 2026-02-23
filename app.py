@@ -1,36 +1,36 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from groq import Groq
+from gtts import gTTS
+from tavily import TavilyClient
 import os
-import requests
-from bs4 import BeautifulSoup
+import io
+import base64
 
 app = Flask(__name__)
 CORS(app)
 
 groq_client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
+tavily_client = TavilyClient(api_key=os.environ.get("TAVILY_API_KEY"))
 
 def search_web(query):
     try:
-        url = "https://www.googleapis.com/customsearch/v1"
-        params = {
-            "key": GOOGLE_API_KEY,
-            "cx": GOOGLE_SEARCH_ID,
-            "q": query,
-            "num": 5,
-            "lr": "lang_hi"
-        }
-        response = requests.get(url, params=params, timeout=5)
-        print("Google Search Status:", response.status_code)  # यह add करो
-        print("Google Search Response:", response.json())     # यह add करो
-        results = response.json()
+        results = tavily_client.search(
+            query=query,
+            search_depth="basic",
+            max_results=5
+        )
 
         search_text = ""
-        for i, snippet in enumerate(snippets):
-            search_text += f"{i+1}. {snippet.get_text()}\n"
+        for i, result in enumerate(results["results"]):
+            title = result.get("title", "")
+            content = result.get("content", "")
+            search_text += f"{i+1}. {title}: {content}\n"
 
+        print("Search Results:", search_text)
         return search_text if search_text else ""
-    except:
+    except Exception as e:
+        print("Search Error:", str(e))
         return ""
 
 @app.route("/")
@@ -43,35 +43,31 @@ def ask():
         data = request.json
         question = data.get("question", "")
 
-        # Search web for latest info
+        # Tavily से web search करो
         web_results = search_web(question)
 
-        # Build prompt with web results
         if web_results:
             system_prompt = f"""आप एक दोस्ताना AI Teacher हैं जिनका नाम राजू राम है।
-आप हमेशा हिंदी में जवाब देते हैं — बिल्कुल एक भारतीय गुरुजी की तरह।
+आप सामान्यतः हिंदी में जवाब देते हैं 
 अगर कोई पूछे आप कौन हैं तो जवाब दें: मैं राजू राम हूं, आपका AI Teacher!
-
-आपके पास नीचे latest web search results हैं — इन्हें use करके वर्तमान समय के अनुसार सटीक जवाब दें।
 जवाब देते समय इन बातों का ध्यान रखें:
-- हमेशा हिंदी में जवाब दें
+-  हिंदी में जवाब दें
 - सरल और आसान भाषा use करें
 - भारतीय उदाहरण दें जैसे क्रिकेट, बॉलीवुड, भारतीय त्योहार आदि
-- प्यार से समझाएं जैसे एक गुरुजी समझाते हैं
+- 
 - जवाब 100 शब्दों से कम रखें
 - वर्तमान और updated जानकारी दें
+- 
 
-Latest Web Search Results:
+Latest Search Results:
 {web_results}"""
         else:
             system_prompt = """आप एक दोस्ताना AI Teacher हैं जिनका नाम राजू राम है।
-आप हमेशा हिंदी में जवाब देते हैं — बिल्कुल एक भारतीय गुरुजी की तरह।
+आप सामान्यतः हिंदी में जवाब देते हैं
 अगर कोई पूछे आप कौन हैं तो जवाब दें: मैं राजू राम हूं, आपका AI Teacher!
-जवाब देते समय इन बातों का ध्यान रखें:
-- हमेशा हिंदी में जवाब दें
+- हिंदी में जवाब दें
 - सरल और आसान भाषा use करें
-- भारतीय उदाहरण दें जैसे क्रिकेट, बॉलीवुड, भारतीय त्योहार आदि
-- प्यार से समझाएं जैसे एक गुरुजी समझाते हैं
+- भारतीय उदाहरण दें
 - जवाब 100 शब्दों से कम रखें"""
 
         response = groq_client.chat.completions.create(
@@ -83,7 +79,20 @@ Latest Web Search Results:
         )
 
         answer = response.choices[0].message.content
-        return jsonify({"answer": answer})
+
+        audio_text = answer.replace("।", " ").replace("...", " ").replace("..", " ")
+
+        tts = gTTS(text=audio_text, lang="hi", slow=False)
+        audio_buffer = io.BytesIO()
+        tts.write_to_fp(audio_buffer)
+        audio_buffer.seek(0)
+
+        audio_base64 = base64.b64encode(audio_buffer.read()).decode("utf-8")
+
+        return jsonify({
+            "answer": answer,
+            "audio": audio_base64
+        })
 
     except Exception as e:
         print("ERROR:", str(e))
