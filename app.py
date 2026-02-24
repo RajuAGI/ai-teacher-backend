@@ -15,147 +15,85 @@ CORS(app)
 groq_client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
 tavily_client = TavilyClient(api_key=os.environ.get("TAVILY_API_KEY"))
 
-# ===== Search 1: Tavily =====
+# ===== Search Helpers =====
 def search_tavily(query):
     try:
-        results = tavily_client.search(
-            query=query,
-            search_depth="basic",
-            max_results=5
-        )
-        search_text = ""
-        for i, result in enumerate(results["results"]):
-            title = result.get("title", "")
-            content = result.get("content", "")
-            search_text += f"{i+1}. {title}: {content}\n"
-        if search_text:
-            print("✅ Tavily Search Success!")
-            return search_text
-        return ""
+        results = tavily_client.search(query=query, search_depth="basic", max_results=5)
+        processed = []
+        for item in results.get("results", []):
+            processed.append({
+                "title": item.get("title", ""),
+                "snippet": (item.get("content","")[:150] + "...") if item.get("content") else "",
+                "url": item.get("url","")
+            })
+        return processed
     except Exception as e:
-        print("❌ Tavily Failed:", str(e))
-        return ""
+        print("❌ Tavily Search Failed:", e)
+        return []
 
-# ===== Search 2: DuckDuckGo (Free & Unlimited) =====
 def search_duckduckgo(query):
     try:
         headers = {"User-Agent": "Mozilla/5.0"}
         url = f"https://duckduckgo.com/html/?q={query}"
         response = requests.get(url, headers=headers, timeout=5)
         soup = BeautifulSoup(response.text, "html.parser")
-        snippets = soup.find_all("a", class_="result__snippet", limit=5)
-        search_text = ""
-        for i, snippet in enumerate(snippets):
-            search_text += f"{i+1}. {snippet.get_text()}\n"
-        if search_text:
-            print("✅ DuckDuckGo Search Success!")
-            return search_text
-        return ""
-    except Exception as e:
-        print("❌ DuckDuckGo Failed:", str(e))
-        return ""
+        
+        titles = soup.select("a.result__a")[:5]
+        snippets = soup.select("a.result__snippet")[:5]
+        results = []
 
-# ===== Search 3: Bing (Free) =====
-def search_bing(query):
-    try:
-        headers = {"User-Agent": "Mozilla/5.0"}
-        url = f"https://www.bing.com/search?q={query}"
-        response = requests.get(url, headers=headers, timeout=5)
-        soup = BeautifulSoup(response.text, "html.parser")
-        results = soup.find_all("p", limit=5)
-        search_text = ""
-        for i, result in enumerate(results):
-            text = result.get_text().strip()
-            if text:
-                search_text += f"{i+1}. {text}\n"
-        if search_text:
-            print("✅ Bing Search Success!")
-            return search_text
-        return ""
+        for i, t in enumerate(titles):
+            results.append({
+                "title": t.get_text(strip=True),
+                "snippet": snippets[i].get_text(strip=True) if i < len(snippets) else "",
+                "url": t.get("href")
+            })
+        return results
     except Exception as e:
-        print("❌ Bing Failed:", str(e))
-        return ""
+        print("❌ DuckDuckGo Search Failed:", e)
+        return []
 
-# ===== Smart Search — सभी try करो =====
+# ===== Smart Web Search =====
 def search_web(query):
-    # पहले Tavily try करो
-    result = search_tavily(query)
-    if result:
-        return result, "Tavily"
+    results = search_tavily(query)
+    if results:
+        return results, "Tavily"
+    results = search_duckduckgo(query)
+    if results:
+        return results, "DuckDuckGo"
+    return [], "None"
 
-    # फिर DuckDuckGo try करो
-    result = search_duckduckgo(query)
-    if result:
-        return result, "DuckDuckGo"
-
-    # फिर Bing try करो
-    result = search_bing(query)
-    if result:
-        return result, "Bing"
-
-    # कोई भी काम नहीं किया
-    print("⚠️ All searches failed — using AI knowledge")
-    return "", "None"
-
+# ===== Routes =====
 @app.route("/")
 def home():
     return jsonify({"status": "Backend is running!"})
+
+# ===== Google / Web Search Route (fixed) =====
 @app.route("/search", methods=["POST"])
 def search():
     try:
         data = request.json
         query = data.get("query", "")
+        if not query:
+            return jsonify({"results": []})
 
-        # Web search करो
-        results = []
-
-        # Tavily से try करो
-        try:
-            tavily_results = tavily_client.search(
-                query=query,
-                search_depth="basic",
-                max_results=5
-            )
-            for item in tavily_results.get("results", []):
-                results.append({
-                    "title": item.get("title", ""),
-                    "snippet": item.get("content", "")[:150] + "...",
-                    "url": item.get("url", "")
-                })
-        except:
-            pass
-
-        # अगर Tavily fail हो तो DuckDuckGo try करो
+        results = search_tavily(query)
         if not results:
-            try:
-                headers = {"User-Agent": "Mozilla/5.0"}
-                url = f"https://duckduckgo.com/html/?q={query}"
-                response = requests.get(url, headers=headers, timeout=5)
-                soup = BeautifulSoup(response.text, "html.parser")
-                titles = soup.find_all("a", class_="result__a", limit=5)
-                snippets = soup.find_all("a", class_="result__snippet", limit=5)
-
-                for i, title in enumerate(titles):
-                    results.append({
-                        "title": title.get_text(),
-                        "snippet": snippets[i].get_text() if i < len(snippets) else "",
-                        "url": title.get("href", "")
-                    })
-            except:
-                pass
-
+            results = search_duckduckgo(query)
+        
         return jsonify({"results": results})
-
     except Exception as e:
-        print("Search ERROR:", str(e))
-        return jsonify({"error": str(e)}), 500
+        print("Search ERROR:", e)
+        return jsonify({"results": [], "error": str(e)}), 500
+
+# ===== AI Teacher Ask Route (unchanged) =====
 @app.route("/ask", methods=["POST"])
 def ask():
     try:
         data = request.json
         question = data.get("question", "")
 
-        # Smart Search करो
+        # Smart Search
         web_results, search_source = search_web(question)
         print(f"Search Source: {search_source}")
 
@@ -171,7 +109,7 @@ def ask():
 - वर्तमान और updated जानकारी दें
 
 Latest Search Results (Source: {search_source}):
-{web_results}"""
+{''.join([f'{i+1}. {r["title"]}: {r["snippet"]}\n' for i,r in enumerate(web_results)])}"""
         else:
             system_prompt = """आप एक दोस्ताना AI Teacher हैं जिनका नाम राजू राम है।
 आप सामान्यतः हिंदी में जवाब देते हैं 
@@ -191,23 +129,20 @@ Latest Search Results (Source: {search_source}):
 
         answer = response.choices[0].message.content
 
+        # TTS
         audio_text = answer.replace("।", " ").replace("...", " ").replace("..", " ")
-
         tts = gTTS(text=audio_text, lang="hi", slow=False)
         audio_buffer = io.BytesIO()
         tts.write_to_fp(audio_buffer)
         audio_buffer.seek(0)
-
         audio_base64 = base64.b64encode(audio_buffer.read()).decode("utf-8")
 
-        return jsonify({
-            "answer": answer,
-            "audio": audio_base64
-        })
+        return jsonify({"answer": answer, "audio": audio_base64})
 
     except Exception as e:
-        print("ERROR:", str(e))
+        print("Ask ERROR:", e)
         return jsonify({"error": str(e)}), 500
 
+# ===== Run =====
 if __name__ == "__main__":
     app.run(debug=True)
