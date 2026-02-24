@@ -100,7 +100,55 @@ def search_web(query):
 @app.route("/")
 def home():
     return jsonify({"status": "Backend is running!"})
+@app.route("/search", methods=["POST"])
+def search():
+    try:
+        data = request.json
+        query = data.get("query", "")
 
+        # Web search करो
+        results = []
+
+        # Tavily से try करो
+        try:
+            tavily_results = tavily_client.search(
+                query=query,
+                search_depth="basic",
+                max_results=5
+            )
+            for item in tavily_results.get("results", []):
+                results.append({
+                    "title": item.get("title", ""),
+                    "snippet": item.get("content", "")[:150] + "...",
+                    "url": item.get("url", "")
+                })
+        except:
+            pass
+
+        # अगर Tavily fail हो तो DuckDuckGo try करो
+        if not results:
+            try:
+                headers = {"User-Agent": "Mozilla/5.0"}
+                url = f"https://duckduckgo.com/html/?q={query}"
+                response = requests.get(url, headers=headers, timeout=5)
+                soup = BeautifulSoup(response.text, "html.parser")
+                titles = soup.find_all("a", class_="result__a", limit=5)
+                snippets = soup.find_all("a", class_="result__snippet", limit=5)
+
+                for i, title in enumerate(titles):
+                    results.append({
+                        "title": title.get_text(),
+                        "snippet": snippets[i].get_text() if i < len(snippets) else "",
+                        "url": title.get("href", "")
+                    })
+            except:
+                pass
+
+        return jsonify({"results": results})
+
+    except Exception as e:
+        print("Search ERROR:", str(e))
+        return jsonify({"error": str(e)}), 500
 @app.route("/ask", methods=["POST"])
 def ask():
     try:
