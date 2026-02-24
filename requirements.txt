@@ -1,0 +1,8 @@
+flask
+flask-cors
+groq
+gtts
+tavily-python
+requests
+beautifulsoup4
+gunicorn
