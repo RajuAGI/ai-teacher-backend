@@ -1,6 +1,0 @@
-flask
-flask-cors
-groq
-gtts
-tavily-python
-gunicorn
